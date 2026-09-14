@@ -10,6 +10,7 @@ import {
 } from './cloudflare-api.mjs';
 import { check, smoke, websocketProbe } from './smoke.mjs';
 import { browserSmoke } from './browser-smoke.mjs';
+import { providerProbes } from './provider-probes.mjs';
 
 const base = `https://${domain}`;
 const diagnosticBase = 'https://gods-eye-view.lilyya.workers.dev';
@@ -102,6 +103,36 @@ let app;
 try {
   const initialHealth = await ready();
   await evidence('runtime-before', initialHealth);
+  // A newly created Custom Domain can need DNS/TLS propagation. Keep these
+  // readiness attempts distinct from the 20 no-retry acceptance requests.
+  for (let attempt = 0; attempt < 36; attempt++) {
+    try {
+      const response = await fetch(base, {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(15000),
+      });
+      await response.arrayBuffer();
+      if (
+        (response.status === 200 &&
+          response.headers.get('x-gev-revision') === revision) ||
+        (response.status === 302 &&
+          new URL(response.headers.get('location')).hostname.endsWith(
+            '.cloudflareaccess.com',
+          ))
+      )
+        break;
+      if (attempt === 35) throw new Error('Custom Domain readiness failed');
+    } catch (error) {
+      console.log(
+        JSON.stringify({
+          domainReadinessAttempt: attempt + 1,
+          error: error.name,
+        }),
+      );
+      if (attempt === 35) throw error;
+    }
+    await delay(5000);
+  }
   const apps = await list(`${accountPath}/access/apps`);
   app = apps.find((candidate) => candidate.domain === domain);
   // First prove the deployed application before protecting a new hostname.
@@ -160,6 +191,16 @@ try {
   await unauthenticated.arrayBuffer();
   const rows = await smoke({ base, headers: accessHeaders, revision });
   await evidence('http-smoke', rows);
+  const settings = await api(
+    `${accountPath}/workers/scripts/gods-eye-view/settings`,
+  );
+  await providerProbes(
+    base,
+    accessHeaders,
+    (settings.bindings || [])
+      .filter((b) => b.type === 'secret_text')
+      .map((b) => b.name),
+  );
   await websocketProbe(base, '/__ops/ws', {
     ...accessHeaders,
     ...probeHeaders,

@@ -135,7 +135,7 @@ export async function smoke({
   // paid sessions or use a credential merely to make the smoke test pass.
   const tomtom = await run('/api/tomtom/status', 200);
   if (!JSON.parse(tomtom.body).hasKey)
-    await run('/api/tomtom/flow/0/0/0.pbf', 503);
+    await run('/api/tomtom/flow/12/936/1709.pbf', 503);
   const firms = await run('/api/firms/status', 200);
   if (!JSON.parse(firms.body).hasKey) await run('/api/firms', 503);
   return rows;
