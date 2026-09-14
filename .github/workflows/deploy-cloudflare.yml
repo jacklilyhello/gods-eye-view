@@ -30,7 +30,7 @@ jobs:
           node-version: '24.14.0'
           cache: npm
           cache-dependency-path: package-lock.json
-      - name: Read Cloudflare deployment target before building
+      - name: Check Cloudflare target and Access write permissions
         run: node .cloudflare/scripts/check-permissions.mjs
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

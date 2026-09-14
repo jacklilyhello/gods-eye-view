@@ -220,6 +220,11 @@ export async function inspect(label) {
       name: application.name,
       maxInstances: application.max_instances,
       instanceType: application.configuration?.instance_type,
+      resources: {
+        vcpu: application.configuration?.vcpu,
+        memoryMiB: application.configuration?.memory_mib,
+        diskMB: application.configuration?.disk?.size_mb,
+      },
       image: application.configuration?.image?.replace(
         process.env.CLOUDFLARE_ACCOUNT_ID,
         'ACCOUNT',

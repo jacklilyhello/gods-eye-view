@@ -36,6 +36,13 @@ The GitHub deployment secrets are `CLOUDFLARE_API_TOKEN`,
 secret with `wrangler deploy --secrets-file`. It is never passed to the container.
 Each deployment rotates this diagnostic credential.
 
+The deployment token also needs the independent account permission
+`Access: Service Tokens Write` (Dashboard: Edit). The workflow verifies creation
+and deletion with a five-minute token that is never authorized for any app,
+before building or changing production. Zone `Bot Management Read` and
+`Analytics Read` provide optional evidence about edge challenges. Worker logs
+redact URL query strings.
+
 Provider secrets can be added to the **gods-eye-view Worker** through Cloudflare
 Secrets. `src/policy.js` is the runtime environment allowlist. A subsequent
 deployment/container restart applies new values. Existing Worker secrets survive
