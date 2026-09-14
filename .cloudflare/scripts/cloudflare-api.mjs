@@ -6,6 +6,14 @@ export const domain = 'gods.lily.lat';
 export const worker = 'gods-eye-view';
 export const evidenceDir = process.env.GEV_EVIDENCE_DIR || 'output/cloudflare';
 
+function safeMessage(message) {
+  let value = String(message || '');
+  for (const [name, secret] of Object.entries(process.env))
+    if (/TOKEN|SECRET|PASSWORD|EMAIL|ACCOUNT_ID|API_KEY/.test(name) && secret)
+      value = value.replaceAll(secret, '[redacted]');
+  return value.replace(/[A-Za-z0-9_-]{60,}/g, '[redacted]').slice(0, 500);
+}
+
 export async function evidence(name, data) {
   await mkdir(evidenceDir, { recursive: true });
   await writeFile(`${evidenceDir}/${name}.json`, JSON.stringify(data, null, 2));
@@ -29,7 +37,7 @@ export async function api(path, { method = 'GET', body } = {}) {
   const result = await response.json();
   if (!response.ok || result.success === false) {
     const error = new Error(
-      `Cloudflare ${method} ${path.replace(accountPath, '/accounts/ACCOUNT')} HTTP ${response.status}; codes ${(result.errors || []).map((e) => e.code).join(',')}`,
+      `Cloudflare ${method} ${path.replace(accountPath, '/accounts/ACCOUNT')} HTTP ${response.status}; ${(result.errors || []).map((e) => `${e.code}: ${safeMessage(e.message)}`).join('; ')}`,
     );
     error.status = response.status;
     throw error;
@@ -75,10 +83,7 @@ async function containerMetrics(applicationId, label) {
       await evidence(`${label}-metrics`, {
         available: false,
         errors: result.errors.map((error) => ({
-          message: error.message?.replaceAll(
-            process.env.CLOUDFLARE_ACCOUNT_ID,
-            'ACCOUNT',
-          ),
+          message: safeMessage(error.message),
         })),
       });
       return;
@@ -129,7 +134,11 @@ async function edgeDiagnostics(zoneId, label) {
                 sbfmLikelyAutomated: value.sbfm_likely_automated,
               };
     } catch (error) {
-      report[name] = { available: false, status: error.status };
+      report[name] = {
+        available: false,
+        status: error.status,
+        reason: safeMessage(error.message),
+      };
     }
   }
   try {
@@ -155,6 +164,10 @@ async function edgeDiagnostics(zoneId, label) {
     });
     report.events = result.data?.viewer?.zones?.[0]?.firewallEventsAdaptive;
     report.eventsAvailable = Array.isArray(report.events);
+    if (result.errors?.length)
+      report.eventsErrors = result.errors.map((error) =>
+        safeMessage(error.message),
+      );
   } catch (error) {
     report.eventsAvailable = false;
     report.eventsStatus = error.status;
