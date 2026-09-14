@@ -318,7 +318,10 @@ try {
           })
         ).body,
       );
-      if (status.state.status === 'stopped') break;
+      if (status.state.status === 'stopped') {
+        await evidence('lifecycle-stopped', status);
+        break;
+      }
       if (attempt === 19)
         throw new Error('Container failed to stop gracefully');
       await delay(1000);

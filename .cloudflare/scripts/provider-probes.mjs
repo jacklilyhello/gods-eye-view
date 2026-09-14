@@ -6,7 +6,7 @@ export async function providerProbes(base, headers, secretNames = []) {
   const samples = [
     {
       provider: 'OpenSky / ADS-B fallback',
-      path: '/api/opensky?lamin=30&lamax=31&lomin=-98&lomax=-97',
+      path: '/api/opensky?lat=30.2672&lon=-97.7431',
     },
     { provider: 'ADS-B military', path: '/api/adsblol/mil' },
     { provider: 'CelesTrak satellites', path: '/api/celestrak/stations' },
@@ -93,6 +93,15 @@ export async function providerProbes(base, headers, secretNames = []) {
           return {
             provider: sample.provider,
             status: response.status,
+            server: response.headers.get('x-gev-server'),
+            edgeAltered:
+              response.headers.get('x-gev-server') !== 'node-production',
+            ...(sample.provider.startsWith('OpenSky')
+              ? {
+                  source: response.headers.get('x-flight-source'),
+                  authMode: response.headers.get('x-opensky-auth-mode-used'),
+                }
+              : {}),
             expectedKeylessStatus: sample.expected,
             ms: Date.now() - began,
             bytes: Buffer.byteLength(text),
@@ -122,6 +131,10 @@ export async function providerProbes(base, headers, secretNames = []) {
   assert.ok(
     results.every((result) => !result.runtimeFault),
     'Provider probes must not encounter runtime disconnects/timeouts',
+  );
+  assert.ok(
+    results.every((result) => !result.edgeAltered),
+    'Edge configuration must preserve provider responses',
   );
   for (const result of results)
     if (result.expectedKeylessStatus)
