@@ -106,6 +106,24 @@ async function containerMetrics(applicationId, label) {
 async function edgeDiagnostics(zoneId, label) {
   const report = {};
   try {
+    const snippets = await api(`/zones/${zoneId}/snippets/snippet_rules`);
+    const rules = Array.isArray(snippets) ? snippets : snippets.rules || [];
+    report.snippetRules = rules.map((rule) => ({
+      name: rule.snippet_name,
+      enabled: rule.enabled,
+      description: rule.description,
+      expression: safeMessage(
+        rule.expression?.replace(/"(?:[^"\\]|\\.)*"/g, '"[redacted]"'),
+      ),
+      mentionsHostname: rule.expression?.includes(domain),
+    }));
+  } catch (error) {
+    report.snippetRulesError = {
+      status: error.status,
+      message: safeMessage(error.message),
+    };
+  }
+  try {
     report.workerRoutes = (await list(`/zones/${zoneId}/workers/routes`))
       .filter((route) => {
         const hostname = route.pattern

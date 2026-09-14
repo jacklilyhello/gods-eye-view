@@ -44,12 +44,16 @@ test('production provider routes preserve status, keyless and prefix semantics',
       ),
     );
     assert.ok(responses.every((body) => body.bootId === health.bootId));
+    assert.equal(responses.at(-1).responseStatuses[405], 1);
     const ws = new WebSocket(base.replace('http:', 'ws:') + '/__health/ws');
     await once(ws, 'open');
     ws.send('transport-probe');
     assert.equal((await once(ws, 'message'))[0].toString(), 'transport-probe');
     ws.close();
     await once(ws, 'close');
+    const finalHealth = await (await fetch(`${base}/__health`)).json();
+    assert.equal(finalHealth.websockets.accepted, 1);
+    assert.equal(finalHealth.websockets.rejected, 0);
   } finally {
     await runtime.close();
   }

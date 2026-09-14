@@ -258,13 +258,19 @@ try {
   const settings = await api(
     `${accountPath}/workers/scripts/gods-eye-view/settings`,
   );
-  await providerProbes(
-    base,
-    accessHeaders,
-    (settings.bindings || [])
-      .filter((b) => b.type === 'secret_text')
-      .map((b) => b.name),
-  );
+  let providerError;
+  try {
+    await providerProbes(
+      base,
+      accessHeaders,
+      (settings.bindings || [])
+        .filter((b) => b.type === 'secret_text')
+        .map((b) => b.name),
+    );
+  } catch (error) {
+    providerError = error;
+    await evidence('provider-failure', { message: error.message });
+  }
   const transportErrors = [];
   const verifyTransport = async (label, probe) => {
     try {
@@ -298,6 +304,7 @@ try {
     healthResults.every((health) => health.bootId === initialHealth.bootId),
     'Container must not restart during normal acceptance traffic',
   );
+  await evidence('runtime-after-traffic', healthResults.at(-1));
   if (process.env.CF_LIFECYCLE_TEST === 'true') {
     await check(diagnosticBase, '/__ops/stop', 200, {
       headers: probeHeaders,
@@ -353,11 +360,15 @@ try {
   );
   const infrastructure = await inspect('infrastructure-after');
   assert.ok(infrastructure.report.domains.some((d) => d.hostname === domain));
-  if (routeError) throw routeError;
-  if (transportErrors.length)
+  const acceptanceErrors = [
+    routeError,
+    providerError,
+    ...transportErrors,
+  ].filter(Boolean);
+  if (acceptanceErrors.length)
     throw new AggregateError(
-      transportErrors,
-      'Realtime transport acceptance failed',
+      acceptanceErrors,
+      'Production acceptance incomplete',
     );
   await evidence('acceptance', {
     revision,

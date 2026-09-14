@@ -21,6 +21,9 @@ export async function providerProbes(base, headers, secretNames = []) {
       provider: 'Overpass',
       path: '/api/overpass',
       method: 'POST',
+      // Upstream tries four mirrors, each with a 22-second deadline. Let that
+      // bounded fallback finish instead of aborting before the final mirror.
+      timeout: 100000,
       body: new URLSearchParams({
         data: '[out:json][timeout:8];node(30.267,-97.744,30.268,-97.743)[amenity];out 3;',
       }).toString(),
@@ -66,7 +69,7 @@ export async function providerProbes(base, headers, secretNames = []) {
             },
             body: sample.body,
             redirect: 'manual',
-            signal: AbortSignal.timeout(45000),
+            signal: AbortSignal.timeout(sample.timeout || 45000),
           });
           const text = await response.text();
           const runtimeFault =

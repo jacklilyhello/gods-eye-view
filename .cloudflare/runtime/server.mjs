@@ -28,6 +28,7 @@ export async function createProductionServer({
   let requests = 0;
   let active = 0;
   const responseStatuses = {};
+  const websocketMetrics = { accepted: 0, rejected: 0 };
   const installed = [];
   // Connect preserves prefix stripping, originalUrl and next() semantics. Wrap
   // promises because Connect itself only catches synchronous handler errors.
@@ -79,6 +80,7 @@ export async function createProductionServer({
       requests,
       active,
       responseStatuses,
+      websockets: websocketMetrics,
       memory: process.memoryUsage(),
       memoryEvents,
       eventLoopDelayP99Ms: Number((delay.percentile(99) / 1e6).toFixed(2)),
@@ -122,10 +124,12 @@ export async function createProductionServer({
   });
   server.on('upgrade', (req, socket, head) => {
     if (closing || req.url !== '/__health/ws' || sockets.clients.size >= 8) {
+      websocketMetrics.rejected++;
       socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
       return;
     }
     sockets.handleUpgrade(req, socket, head, (ws) => {
+      websocketMetrics.accepted++;
       const deadline = setTimeout(
         () => ws.close(1000, 'probe complete'),
         15000,
