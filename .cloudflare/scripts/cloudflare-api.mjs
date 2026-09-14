@@ -50,6 +50,118 @@ export async function list(path) {
   throw new Error('Cloudflare pagination exceeded bounded read limit');
 }
 
+async function containerMetrics(applicationId, label) {
+  try {
+    const result = await api('/graphql', {
+      method: 'POST',
+      body: {
+        query: `query Metrics($account: String, $start: Time, $end: Time, $application: String) {
+        viewer { accounts(filter: {accountTag: $account}) {
+          containersMetricsAdaptiveGroups(limit: 300, filter: {datetime_geq: $start, datetime_leq: $end, applicationId: $application}, orderBy: [datetimeFiveMinutes_ASC]) {
+            count dimensions {datetimeFiveMinutes instanceId placementId location}
+            max {memory cpuUtilization containerUptime} avg {memory cpuUtilization}
+          }
+        }}
+      }`,
+        variables: {
+          account: process.env.CLOUDFLARE_ACCOUNT_ID,
+          start: new Date(Date.now() - 4 * 3600000).toISOString(),
+          end: new Date().toISOString(),
+          application: applicationId,
+        },
+      },
+    });
+    if (result.errors?.length) {
+      await evidence(`${label}-metrics`, {
+        available: false,
+        errors: result.errors.map((error) => ({
+          message: error.message?.replaceAll(
+            process.env.CLOUDFLARE_ACCOUNT_ID,
+            'ACCOUNT',
+          ),
+        })),
+      });
+      return;
+    }
+    const rows =
+      result.data?.viewer?.accounts?.[0]?.containersMetricsAdaptiveGroups;
+    await evidence(`${label}-metrics`, {
+      available: Array.isArray(rows),
+      rows,
+      note: 'Cloudflare sampled workload metrics; availability and reporting lag are separate from Node health.',
+    });
+  } catch (error) {
+    await evidence(`${label}-metrics`, {
+      available: false,
+      reason: error.message,
+    });
+  }
+}
+
+async function edgeDiagnostics(zoneId, label) {
+  const report = {};
+  for (const [name, path] of Object.entries({
+    botManagement: `/zones/${zoneId}/bot_management`,
+    securityLevel: `/zones/${zoneId}/settings/security_level`,
+    customRules: `/zones/${zoneId}/rulesets/phases/http_request_firewall_custom/entrypoint`,
+  })) {
+    try {
+      const value = await api(path);
+      report[name] =
+        name === 'customRules'
+          ? {
+              id: value.id,
+              rules: value.rules?.map((rule) => ({
+                id: rule.id,
+                action: rule.action,
+                enabled: rule.enabled,
+                description: rule.description,
+                mentionsHostname: rule.expression?.includes(domain),
+                mentionsAccess: /access/i.test(rule.expression || ''),
+              })),
+            }
+          : name === 'securityLevel'
+            ? { value: value.value }
+            : {
+                fightMode: value.fight_mode,
+                enableJs: value.enable_js,
+                sbfmDefinitelyAutomated: value.sbfm_definitely_automated,
+                sbfmLikelyAutomated: value.sbfm_likely_automated,
+              };
+    } catch (error) {
+      report[name] = { available: false, status: error.status };
+    }
+  }
+  try {
+    const result = await api('/graphql', {
+      method: 'POST',
+      body: {
+        query: `query EdgeEvents($zone: string, $filter: FirewallEventsAdaptiveFilter_InputObject) {
+        viewer { zones(filter: {zoneTag: $zone}) {
+          firewallEventsAdaptive(limit: 30, filter: $filter, orderBy: [datetime_DESC]) {
+            datetime action source ruleId clientRequestHTTPHost
+          }
+        }}
+      }`,
+        variables: {
+          zone: zoneId,
+          filter: {
+            datetime_geq: new Date(Date.now() - 3600000).toISOString(),
+            datetime_leq: new Date().toISOString(),
+            clientRequestHTTPHost: domain,
+          },
+        },
+      },
+    });
+    report.events = result.data?.viewer?.zones?.[0]?.firewallEventsAdaptive;
+    report.eventsAvailable = Array.isArray(report.events);
+  } catch (error) {
+    report.eventsAvailable = false;
+    report.eventsStatus = error.status;
+  }
+  await evidence(`${label}-edge`, report);
+}
+
 export async function inspect(label) {
   const settings = await api(
     `${accountPath}/workers/scripts/${worker}/settings`,
@@ -74,6 +186,8 @@ export async function inspect(label) {
     (app) => app.name === 'gods-eye-view-godseyeviewcontainer',
   );
   assert.ok(application, 'Expected existing Container application');
+  await containerMetrics(application.id, label);
+  await edgeDiagnostics(zone.id, label);
   // Explicit allowlists: no provider values, account tokens or environment maps.
   const report = {
     observedAt: new Date().toISOString(),

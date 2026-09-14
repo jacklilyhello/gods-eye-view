@@ -103,6 +103,16 @@ let app;
 try {
   const initialHealth = await ready();
   await evidence('runtime-before', initialHealth);
+  const apps = await list(`${accountPath}/access/apps`);
+  app = await ensureAccess(
+    apps.find((candidate) => candidate.domain === domain),
+  );
+  await evidence('access-application', {
+    id: app.id,
+    domain: app.domain,
+    type: app.type,
+    ownerPolicy: true,
+  });
   // A newly created Custom Domain can need DNS/TLS propagation. Keep these
   // readiness attempts distinct from the 20 no-retry acceptance requests.
   for (let attempt = 0; attempt < 36; attempt++) {
@@ -118,7 +128,9 @@ try {
         (response.status === 302 &&
           new URL(response.headers.get('location')).hostname.endsWith(
             '.cloudflareaccess.com',
-          ))
+          )) ||
+        (response.status === 403 &&
+          response.headers.get('cf-mitigated') === 'challenge')
       )
         break;
       if (attempt === 35) throw new Error('Custom Domain readiness failed');
@@ -133,11 +145,8 @@ try {
     }
     await delay(5000);
   }
-  const apps = await list(`${accountPath}/access/apps`);
-  app = apps.find((candidate) => candidate.domain === domain);
-  // First prove the deployed application before protecting a new hostname.
-  if (!app) await smoke({ base, revision });
-  app = await ensureAccess(app);
+  // A challenge proves only DNS/TLS readiness. Authenticated HTTP 200 and the
+  // exact deployed revision are still mandatory in the acceptance tests below.
   token = await api(`${accountPath}/access/service_tokens`, {
     method: 'POST',
     body: {
@@ -170,6 +179,13 @@ try {
     });
     await r.arrayBuffer();
     if (r.status === 200) break;
+    console.log(
+      JSON.stringify({
+        accessReadinessAttempt: attempt + 1,
+        status: r.status,
+        mitigation: r.headers.get('cf-mitigated'),
+      }),
+    );
     if (attempt === 23)
       throw new Error(`Access service authentication HTTP ${r.status}`);
     await delay(5000);
@@ -285,12 +301,15 @@ try {
     lifecycleTest: process.env.CF_LIFECYCLE_TEST === 'true',
   });
 } finally {
-  if (policy && app)
-    await api(`${accountPath}/access/apps/${app.id}/policies/${policy.id}`, {
-      method: 'DELETE',
-    });
-  if (token)
-    await api(`${accountPath}/access/service_tokens/${token.id}`, {
-      method: 'DELETE',
-    });
+  try {
+    if (policy && app)
+      await api(`${accountPath}/access/apps/${app.id}/policies/${policy.id}`, {
+        method: 'DELETE',
+      });
+  } finally {
+    if (token)
+      await api(`${accountPath}/access/service_tokens/${token.id}`, {
+        method: 'DELETE',
+      });
+  }
 }
