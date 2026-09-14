@@ -7,7 +7,7 @@ const token = await api(`${accountPath}/access/service_tokens`, {
   method: 'POST',
   body: {
     name: `gods-permission-probe-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`,
-    duration: '5m',
+    duration: '10m',
   },
 });
 console.log(`::add-mask::${token.client_id}`);
