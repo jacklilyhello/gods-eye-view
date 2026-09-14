@@ -230,13 +230,23 @@ try {
     ),
   );
   await unauthenticated.arrayBuffer();
-  await smoke({
-    base,
-    headers: accessHeaders,
-    revision,
-    onStaticComplete: (rows) => evidence('http-home-static', rows),
-    onApiComplete: (rows) => evidence('http-smoke', rows),
-  });
+  let routeError;
+  try {
+    await smoke({
+      base,
+      headers: accessHeaders,
+      revision,
+      onStaticComplete: (rows) => evidence('http-home-static', rows),
+      onApiComplete: (rows) => evidence('http-smoke', rows),
+    });
+  } catch (error) {
+    // Continue independent transport/lifecycle checks after collecting method
+    // status differences, but retain a failing overall acceptance result.
+    if (!error.message.startsWith('All route and method probes must pass'))
+      throw error;
+    routeError = error;
+    await evidence('http-route-failure', { message: error.message });
+  }
   const settings = await api(
     `${accountPath}/workers/scripts/gods-eye-view/settings`,
   );
@@ -315,6 +325,7 @@ try {
   await evidence('lifecycle', lifecycle);
   const infrastructure = await inspect('infrastructure-after');
   assert.ok(infrastructure.report.domains.some((d) => d.hostname === domain));
+  if (routeError) throw routeError;
   await evidence('acceptance', {
     revision,
     completedAt: new Date().toISOString(),

@@ -105,6 +105,36 @@ async function containerMetrics(applicationId, label) {
 
 async function edgeDiagnostics(zoneId, label) {
   const report = {};
+  for (const [scope, prefix] of [
+    ['zone', `/zones/${zoneId}`],
+    ['account', accountPath],
+  ]) {
+    try {
+      const value = await api(
+        `${prefix}/rulesets/phases/http_custom_errors/entrypoint`,
+      );
+      report[`${scope}ErrorRules`] = {
+        id: value.id,
+        rules: value.rules?.map((rule) => ({
+          id: rule.id,
+          action: rule.action,
+          enabled: rule.enabled,
+          description: rule.description,
+          // Custom error expressions use response metadata. Redact credentials
+          // and never include the response body or custom asset URL.
+          expression: safeMessage(rule.expression),
+          statusCode: rule.action_parameters?.status_code,
+          contentType: rule.action_parameters?.content_type,
+          usesAsset: Boolean(rule.action_parameters?.asset_name),
+        })),
+      };
+    } catch (error) {
+      report[`${scope}ErrorRules`] = {
+        status: error.status,
+        reason: safeMessage(error.message),
+      };
+    }
+  }
   for (const [name, path] of Object.entries({
     botManagement: `/zones/${zoneId}/bot_management`,
     securityLevel: `/zones/${zoneId}/settings/security_level`,

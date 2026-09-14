@@ -147,6 +147,7 @@ export async function smoke({
     ['/api/tomtom/status', 200],
     ['/api/firms/status', 200],
     ['/api/terrain/heights', 400],
+    ['/api/overpass', 405],
     ['/api/tomtom/missing', 404],
     ['/api/no-such-provider', 404],
     ['/api/realtime/token', 405, 'DELETE'],
