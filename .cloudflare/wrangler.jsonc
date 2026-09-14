@@ -1,0 +1,29 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gods-eye-view",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-11",
+  "workers_dev": true,
+  "containers": [
+    {
+      "class_name": "GodsEyeViewContainer",
+      "image": "../Dockerfile.cloudflare",
+      "image_build_context": "..",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GODS_EYE",
+        "class_name": "GodsEyeViewContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GodsEyeViewContainer"]
+    }
+  ]
+}

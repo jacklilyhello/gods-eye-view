@@ -1,0 +1,16 @@
+.git
+**/node_modules
+dist
+**/.env
+**/.env.*
+**/.dev.vars
+**/.dev.vars.*
+**/.wrangler
+**/*.log
+.gev-logs
+.gev-cache
+output
+screenshots
+qa-shots
+.DS_Store
+pinokio/ENVIRONMENT
