@@ -21,7 +21,9 @@ export async function providerProbes(base, headers, secretNames = []) {
       provider: 'Overpass',
       path: '/api/overpass',
       method: 'POST',
-      body: '[out:json][timeout:8];node(30.267,-97.744,30.268,-97.743)[amenity];out 3;',
+      body: new URLSearchParams({
+        data: '[out:json][timeout:8];node(30.267,-97.744,30.268,-97.743)[amenity];out 3;',
+      }).toString(),
     },
   ];
   if (!secretNames.includes('OPENAI_API_KEY'))
@@ -55,7 +57,13 @@ export async function providerProbes(base, headers, secretNames = []) {
         try {
           const response = await fetch(new URL(sample.path, base), {
             method: sample.method || 'GET',
-            headers: { ...headers, Origin: new URL(base).origin },
+            headers: {
+              ...headers,
+              Origin: new URL(base).origin,
+              ...(sample.body
+                ? { 'Content-Type': 'application/x-www-form-urlencoded' }
+                : {}),
+            },
             body: sample.body,
             redirect: 'manual',
             signal: AbortSignal.timeout(45000),

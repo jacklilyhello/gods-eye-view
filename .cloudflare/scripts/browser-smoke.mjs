@@ -67,6 +67,19 @@ export async function browserSmoke(base, headers = {}) {
       canvasCount: document.querySelectorAll('canvas').length,
       text: document.body.innerText.slice(0, 1000),
     }));
+    const cookies = await page.browserContext().cookies();
+    await evidence('browser-render', {
+      ...state,
+      pageErrors: errors,
+      accessCookiePresent: cookies.some(
+        (cookie) => cookie.name === 'CF_Authorization',
+      ),
+    });
+    await page.keyboard.press('Escape');
+    await page.screenshot({
+      path: `${evidenceDir}/production-desktop.png`,
+      fullPage: false,
+    });
     const websocket = await page.evaluate(
       () =>
         new Promise((resolve, reject) => {
@@ -91,16 +104,11 @@ export async function browserSmoke(base, headers = {}) {
           };
         }),
     );
-    await page.keyboard.press('Escape');
     await evidence('browser', {
       ...state,
       websocket,
       pageErrors: errors,
       failedRequests,
-    });
-    await page.screenshot({
-      path: `${evidenceDir}/production-desktop.png`,
-      fullPage: false,
     });
     assert.deepEqual(
       errors,

@@ -27,6 +27,7 @@ export async function createProductionServer({
   let closing = false;
   let requests = 0;
   let active = 0;
+  const responseStatuses = {};
   const installed = [];
   // Connect preserves prefix stripping, originalUrl and next() semantics. Wrap
   // promises because Connect itself only catches synchronous handler errors.
@@ -52,6 +53,10 @@ export async function createProductionServer({
     res.once('close', () => {
       active--;
     });
+    res.once('finish', () => {
+      responseStatuses[res.statusCode] =
+        (responseStatuses[res.statusCode] || 0) + 1;
+    });
     if (active > 64) return json(res, 503, { error: 'server_busy' });
     next();
   });
@@ -73,6 +78,7 @@ export async function createProductionServer({
       uptimeSeconds: Math.floor(process.uptime()),
       requests,
       active,
+      responseStatuses,
       memory: process.memoryUsage(),
       memoryEvents,
       eventLoopDelayP99Ms: Number((delay.percentile(99) / 1e6).toFixed(2)),

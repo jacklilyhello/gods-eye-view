@@ -161,6 +161,7 @@ async function edgeDiagnostics(zoneId, label) {
   for (const [name, path] of Object.entries({
     botManagement: `/zones/${zoneId}/bot_management`,
     securityLevel: `/zones/${zoneId}/settings/security_level`,
+    websockets: `/zones/${zoneId}/settings/websockets`,
     customRules: `/zones/${zoneId}/rulesets/phases/http_request_firewall_custom/entrypoint`,
   })) {
     try {
@@ -178,7 +179,7 @@ async function edgeDiagnostics(zoneId, label) {
                 mentionsAccess: /access/i.test(rule.expression || ''),
               })),
             }
-          : name === 'securityLevel'
+          : ['securityLevel', 'websockets'].includes(name)
             ? { value: value.value }
             : {
                 fightMode: value.fight_mode,

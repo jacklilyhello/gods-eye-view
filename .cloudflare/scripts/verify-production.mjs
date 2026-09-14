@@ -104,6 +104,14 @@ let app;
 try {
   const initialHealth = await ready();
   await evidence('runtime-before', initialHealth);
+  const initialLifecycle = JSON.parse(
+    (
+      await check(diagnosticBase, '/__ops/status', 200, {
+        headers: probeHeaders,
+      })
+    ).body,
+  );
+  await evidence('lifecycle-before', initialLifecycle);
   const runtimeSamples = [];
   for (let attempt = 0; attempt < 20; attempt++) {
     const { body, row } = await check(diagnosticBase, '/__ops/health', 200, {
@@ -257,11 +265,24 @@ try {
       .filter((b) => b.type === 'secret_text')
       .map((b) => b.name),
   );
-  await websocketProbe(base, '/__ops/ws', {
-    ...accessHeaders,
-    ...probeHeaders,
-  });
-  const browser = await browserSmoke(base, accessHeaders);
+  const transportErrors = [];
+  const verifyTransport = async (label, probe) => {
+    try {
+      return await probe();
+    } catch (error) {
+      transportErrors.push(error);
+      await evidence(label, { message: error.message });
+    }
+  };
+  await verifyTransport('websocket-failure', () =>
+    websocketProbe(base, '/__ops/ws', {
+      ...accessHeaders,
+      ...probeHeaders,
+    }),
+  );
+  const browser = await verifyTransport('browser-failure', () =>
+    browserSmoke(base, accessHeaders),
+  );
   const healthResults = await Promise.all(
     Array.from({ length: 20 }, async () =>
       JSON.parse(
@@ -308,10 +329,12 @@ try {
       headers: accessHeaders,
       revision,
     });
-    await websocketProbe(base, '/__ops/ws', {
-      ...accessHeaders,
-      ...probeHeaders,
-    });
+    await verifyTransport('websocket-restart-failure', () =>
+      websocketProbe(base, '/__ops/ws', {
+        ...accessHeaders,
+        ...probeHeaders,
+      }),
+    );
   }
   const finalHealth = await ready();
   await evidence('runtime-final', finalHealth);
@@ -323,9 +346,19 @@ try {
     ).body,
   );
   await evidence('lifecycle', lifecycle);
+  assert.equal(
+    lifecycle.lifecycle?.errors || 0,
+    initialLifecycle.lifecycle?.errors || 0,
+    'No additional Container lifecycle errors during acceptance',
+  );
   const infrastructure = await inspect('infrastructure-after');
   assert.ok(infrastructure.report.domains.some((d) => d.hostname === domain));
   if (routeError) throw routeError;
+  if (transportErrors.length)
+    throw new AggregateError(
+      transportErrors,
+      'Realtime transport acceptance failed',
+    );
   await evidence('acceptance', {
     revision,
     completedAt: new Date().toISOString(),
