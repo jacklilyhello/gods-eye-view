@@ -24,7 +24,12 @@ export async function check(
     bytes: Buffer.byteLength(body),
   };
   console.log(JSON.stringify(row));
-  assert.equal(response.status, status, `${method} ${path}`);
+  if (Array.isArray(status))
+    assert.ok(
+      status.includes(response.status),
+      `${method} ${path}: HTTP ${response.status}`,
+    );
+  else assert.equal(response.status, status, `${method} ${path}`);
   assert.ok(!body.includes('Container suddenly disconnected'), path);
   if (revision && status === 200)
     assert.equal(
@@ -70,6 +75,7 @@ export async function smoke({
   headers = {},
   revision,
   apiOnly = false,
+  onStaticComplete,
 } = {}) {
   const rows = [];
   const run = async (path, status, method = 'GET') => {
@@ -108,10 +114,12 @@ export async function smoke({
     const texture = '/cesium/Assets/Textures/NaturalEarthII/0/0/0.jpg';
     await run(texture, 200);
     await Promise.all(Array.from({ length: 12 }, () => run('/', 200)));
+    await onStaticComplete?.(rows);
+    // Managed WAF may reject sensitive-file scans before they reach the
+    // Worker's 404. Both refusals are safe; ordinary API 404s remain exact.
+    for (const path of ['/.env', '/.git/config']) await run(path, [403, 404]);
     for (const path of [
       '/api/no-such-provider',
-      '/.env',
-      '/.git/config',
       '/src/main.js',
       '/@vite/client',
       '/__health',

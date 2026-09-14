@@ -230,7 +230,12 @@ try {
     ),
   );
   await unauthenticated.arrayBuffer();
-  const rows = await smoke({ base, headers: accessHeaders, revision });
+  const rows = await smoke({
+    base,
+    headers: accessHeaders,
+    revision,
+    onStaticComplete: (rows) => evidence('http-home-static', rows),
+  });
   await evidence('http-smoke', rows);
   const settings = await api(
     `${accountPath}/workers/scripts/gods-eye-view/settings`,
@@ -336,5 +341,26 @@ try {
       await api(`${accountPath}/access/service_tokens/${token.id}`, {
         method: 'DELETE',
       });
+  }
+  if (token && app) {
+    const policies = await list(
+      `${accountPath}/access/apps/${app.id}/policies`,
+    );
+    const tokens = await list(`${accountPath}/access/service_tokens`);
+    assert.ok(!policies.some((candidate) => candidate.id === policy?.id));
+    assert.ok(!tokens.some((candidate) => candidate.id === token.id));
+    await evidence('access-cleanup', {
+      temporaryTokenRemoved: true,
+      temporaryPolicyRemoved: true,
+      remainingOwnerPolicies: policies.filter(
+        (candidate) => candidate.decision === 'allow',
+      ).length,
+      remainingServicePolicies: policies.filter(
+        (candidate) => candidate.decision === 'non_identity',
+      ).length,
+      bypassPolicies: policies.filter(
+        (candidate) => candidate.decision === 'bypass',
+      ).length,
+    });
   }
 }
