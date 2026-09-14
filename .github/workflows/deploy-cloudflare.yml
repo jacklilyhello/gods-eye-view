@@ -14,9 +14,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  test:
+  production:
     if: github.ref == 'refs/heads/cf-production'
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     env:
       PUPPETEER_SKIP_DOWNLOAD: '1'
       GEV_REQUIRE_ALLOCATION_GATE: '1'
@@ -30,31 +31,66 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
+      - run: npm ci --prefix .cloudflare/runtime
+      - run: npm ci --prefix .cloudflare
       - run: npm test
-      - run: npm run build
-      - name: Validate Cloudflare container image
+      - name: Test production adapter
+        run: node --test .cloudflare/tests/*.test.mjs
+      - name: Build browser assets without provider credentials
+        run: npm run build -- --config .cloudflare/vite.config.mjs
+      - run: node .cloudflare/scripts/validate-build.mjs
+      - name: Validate Worker configuration without deployment
+        run: .cloudflare/node_modules/.bin/wrangler deploy --config .cloudflare/wrangler.jsonc --dry-run --outdir .cloudflare/.wrangler/dry-run
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+      - name: Build production container
         run: docker build -f Dockerfile.cloudflare -t gods-eye-view-test .
-
-  deploy:
-    if: github.ref == 'refs/heads/cf-production'
-    needs: test
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .cloudflare
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24.14.0'
-          cache: npm
-          cache-dependency-path: .cloudflare/package-lock.json
-      - run: npm ci
+      - name: Start and exercise container at basic resource limits
+        run: |
+          docker run -d --name gev-ci --cpus=0.25 --memory=1g -p 127.0.0.1:4173:4173 gods-eye-view-test
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/__health > /tmp/gev-health.json; then break; fi
+            sleep 1
+          done
+          node .cloudflare/scripts/smoke.mjs http://127.0.0.1:4173 --api-only
+          docker stop --time 10 gev-ci
+          test "$(docker inspect --format '{{.State.ExitCode}}' gev-ci)" = 0
+          test "$(docker inspect --format '{{.State.OOMKilled}}' gev-ci)" = false
+          docker start gev-ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/__health > /tmp/gev-restarted-health.json; then break; fi
+            sleep 1
+          done
+          node .cloudflare/scripts/smoke.mjs http://127.0.0.1:4173 --api-only
+          docker stop --time 10 gev-ci
+      - name: Install browser for production verification
+        run: npx puppeteer browsers install chrome --install-deps
+      - name: Read production state and prepare deployment probe secret
+        run: node .cloudflare/scripts/preflight.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy Worker and container
-        run: npx wrangler deploy
+        run: .cloudflare/node_modules/.bin/wrangler deploy --config .cloudflare/wrangler.jsonc --containers-rollout immediate --keep-vars --var "GEV_REVISION:$GITHUB_SHA" --secrets-file "$RUNNER_TEMP/gods-probe.json"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_SEND_METRICS: 'false'
+      - name: Verify domain, runtime, Access, browser and realtime transport
+        run: node .cloudflare/scripts/verify-production.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_ACCESS_EMAIL: ${{ secrets.CF_ACCESS_EMAIL }}
+          CF_LIFECYCLE_TEST: ${{ vars.CF_LIFECYCLE_TEST }}
+      - name: Capture local container diagnostics
+        if: always()
+        run: docker logs gev-ci 2>&1 || true
+      - name: Upload sanitized production evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-evidence-${{ github.sha }}
+          path: output/cloudflare/
+          if-no-files-found: ignore
+          retention-days: 14

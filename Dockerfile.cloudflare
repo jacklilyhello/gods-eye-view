@@ -1,16 +1,20 @@
-FROM node:24-bookworm-slim
+FROM node:24.14.0-bookworm-slim AS dependencies
+WORKDIR /runtime
+COPY .cloudflare/runtime/package.json .cloudflare/runtime/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
+FROM node:24.14.0-bookworm-slim
 WORKDIR /app
-
-COPY package.json package-lock.json ./
-
-RUN npm ci
-
-COPY . .
-
-ENV HOST=0.0.0.0
-ENV PORT=4173
-
+COPY --from=dependencies /runtime/node_modules ./node_modules
+COPY --chown=node:node package.json ./package.json
+COPY --chown=node:node server ./server
+COPY --chown=node:node src ./src
+COPY --chown=node:node config ./config
+COPY --chown=node:node .cloudflare/runtime/server.mjs ./.cloudflare/runtime/server.mjs
+RUN mkdir -p .gev-cache .gev-logs && chown node:node .gev-cache .gev-logs
+ENV HOST=0.0.0.0 PORT=4173 NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512
+USER node
 EXPOSE 4173
-
-CMD ["npm", "run", "dev", "--", "--strictPort"]
+STOPSIGNAL SIGTERM
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD node -e "fetch('http://127.0.0.1:4173/__health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", ".cloudflare/runtime/server.mjs"]

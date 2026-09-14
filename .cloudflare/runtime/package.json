@@ -1,0 +1,12 @@
+{
+  "name": "gods-eye-view-production-server",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.14.0 <25"
+  },
+  "dependencies": {
+    "connect": "3.7.0",
+    "ws": "8.21.0"
+  }
+}
