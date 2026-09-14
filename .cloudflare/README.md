@@ -83,6 +83,14 @@ allowing only the email in `CF_ACCESS_EMAIL` through One-time PIN. Do not replac
 it with Worker-level Access: Cloudflare currently documents a WebSocket
 limitation for Worker-level policies.
 
+For this exact hostname, a custom rule skips only Super Bot Fight Mode's
+interactive challenge phase, which runs before Access and otherwise blocks
+authenticated automation and WebSocket handshakes. Managed WAF, existing custom
+rules, rate limits, DDoS protection and Access continue to execute. The deployment
+verifies the Access owner policy before configuring this scoped rule, preserves
+all other zone rules, and requires both unauthenticated Access redirects and
+authenticated HTTP 200 responses. Its token therefore also needs zone WAF write.
+
 The public workers.dev URL redirects to the custom domain. `/__ops/*` on either
 host additionally requires `X-GEV-Probe-Token`; normal API requests cannot select
 a different container port. Access cookies, Access service credentials and

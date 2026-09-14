@@ -11,6 +11,7 @@ import {
 import { check, smoke, websocketProbe } from './smoke.mjs';
 import { browserSmoke } from './browser-smoke.mjs';
 import { providerProbes } from './provider-probes.mjs';
+import { ensureEdgeAccess } from './ensure-edge-access.mjs';
 
 const base = `https://${domain}`;
 const diagnosticBase = 'https://gods-eye-view.lilyya.workers.dev';
@@ -136,6 +137,7 @@ try {
     type: app.type,
     ownerPolicy: true,
   });
+  await ensureEdgeAccess(app);
   // A newly created Custom Domain can need DNS/TLS propagation. Keep these
   // readiness attempts distinct from the 20 no-retry acceptance requests.
   for (let attempt = 0; attempt < 36; attempt++) {

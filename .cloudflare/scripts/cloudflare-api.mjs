@@ -175,29 +175,35 @@ async function edgeDiagnostics(zoneId, label) {
   // Resolve only rule IDs observed for our hostname. Do not publish rule
   // expressions or inspect unrelated request payloads from the shared zone.
   try {
-    const entrypoint = await api(
-      `/zones/${zoneId}/rulesets/phases/http_request_firewall_managed/entrypoint`,
-    );
     const observed = new Set(report.events?.map((event) => event.ruleId));
     report.managedRules = [];
-    for (const execute of (entrypoint.rules || []).filter(
-      (rule) => rule.action === 'execute' && rule.enabled !== false,
-    )) {
-      const ruleset = await api(
-        `/zones/${zoneId}/rulesets/${execute.action_parameters.id}`,
+    for (const phase of [
+      'http_request_firewall_managed',
+      'http_request_sbfm',
+    ]) {
+      const entrypoint = await api(
+        `/zones/${zoneId}/rulesets/phases/${phase}/entrypoint`,
       );
-      report.managedRules.push({
-        rulesetId: ruleset.id,
-        name: ruleset.name,
-        matchingRules: (ruleset.rules || [])
-          .filter((rule) => observed.has(rule.id))
-          .map((rule) => ({
-            id: rule.id,
-            description: rule.description,
-            action: rule.action,
-            enabled: rule.enabled,
-          })),
-      });
+      for (const execute of (entrypoint.rules || []).filter(
+        (rule) => rule.action === 'execute' && rule.enabled !== false,
+      )) {
+        const ruleset = await api(
+          `/zones/${zoneId}/rulesets/${execute.action_parameters.id}`,
+        );
+        report.managedRules.push({
+          rulesetId: ruleset.id,
+          name: ruleset.name,
+          phase,
+          matchingRules: (ruleset.rules || [])
+            .filter((rule) => observed.has(rule.id))
+            .map((rule) => ({
+              id: rule.id,
+              description: rule.description,
+              action: rule.action,
+              enabled: rule.enabled,
+            })),
+        });
+      }
     }
   } catch (error) {
     report.managedRulesError = safeMessage(error.message);
