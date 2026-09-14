@@ -4,11 +4,15 @@
   "main": "src/index.js",
   "compatibility_date": "2026-09-11",
   "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
   "containers": [
     {
       "class_name": "GodsEyeViewContainer",
       "image": "../Dockerfile.cloudflare",
       "image_build_context": "..",
+      "instance_type": "basic",
       "max_instances": 1
     }
   ],

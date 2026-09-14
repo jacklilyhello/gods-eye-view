@@ -19,6 +19,20 @@ export class GodsEyeViewContainer extends Container {
   defaultPort = 4173;
   sleepAfter = '30m';
 
+  onStart() {
+    console.log('[container] started');
+  }
+
+  onStop({ exitCode, reason }) {
+    console.log('[container] stopped', { exitCode, reason });
+  }
+
+  onError(error) {
+    console.error('[container] error', error);
+    // Preserve the SDK's default error propagation.
+    throw error;
+  }
+
   constructor(ctx, env) {
     super(ctx, env);
     this.envVars = { HOST: '0.0.0.0', PORT: '4173' };
