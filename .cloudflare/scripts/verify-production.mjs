@@ -103,6 +103,29 @@ let app;
 try {
   const initialHealth = await ready();
   await evidence('runtime-before', initialHealth);
+  const runtimeSamples = [];
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const { body, row } = await check(diagnosticBase, '/__ops/health', 200, {
+      headers: probeHeaders,
+    });
+    const sample = JSON.parse(body);
+    assert.equal(
+      sample.bootId,
+      initialHealth.bootId,
+      'Stable Node process before Access verification',
+    );
+    runtimeSamples.push({
+      ...row,
+      bootId: sample.bootId,
+      rss: sample.memory.rss,
+      uptimeSeconds: sample.uptimeSeconds,
+    });
+  }
+  await websocketProbe(diagnosticBase, '/__ops/ws', probeHeaders);
+  await evidence('runtime-transport', {
+    samples: runtimeSamples,
+    websocket: 'Worker + Container passed; Access tested separately',
+  });
   const apps = await list(`${accountPath}/access/apps`);
   app = await ensureAccess(
     apps.find((candidate) => candidate.domain === domain),
