@@ -30,6 +30,11 @@ jobs:
           node-version: '24.14.0'
           cache: npm
           cache-dependency-path: package-lock.json
+      - name: Read Cloudflare deployment target before building
+        run: node --input-type=module -e "import { inspect } from './.cloudflare/scripts/cloudflare-api.mjs'; await inspect('infrastructure-initial');"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - run: npm ci
       - run: npm ci --prefix .cloudflare/runtime
       - run: npm ci --prefix .cloudflare
@@ -64,7 +69,9 @@ jobs:
           node .cloudflare/scripts/smoke.mjs http://127.0.0.1:4173 --api-only
           docker stop --time 10 gev-ci
       - name: Install browser for production verification
-        run: npx puppeteer browsers install chrome --install-deps
+        run: |
+          npx puppeteer browsers install chrome
+          node --input-type=module -e "import puppeteer from 'puppeteer'; const browser = await puppeteer.launch({headless:true,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']}); await browser.close(); console.log('Chromium launch preflight passed');"
       - name: Read production state and prepare deployment probe secret
         run: node .cloudflare/scripts/preflight.mjs
         env:
