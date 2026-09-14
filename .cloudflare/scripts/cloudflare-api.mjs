@@ -111,7 +111,12 @@ export async function inspect(label) {
         status: p.status,
         createdAt: p.created_at,
         terminatedAt: p.terminated_at,
-        events: p.events,
+        events: p.events?.map((e) => ({
+          type: e.type,
+          name: e.name,
+          timestamp: e.timestamp,
+          exitCode: e.exit_code,
+        })),
       })),
     })),
   };

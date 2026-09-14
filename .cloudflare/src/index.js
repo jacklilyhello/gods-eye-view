@@ -81,6 +81,14 @@ export default {
       url.protocol = 'https:';
       return Response.redirect(url.toString(), 308);
     }
+    if (url.pathname === '/__transport/ws') {
+      const origin = request.headers.get('origin');
+      if (origin && origin !== url.origin)
+        return json({ error: 'origin_not_allowed' }, 403);
+      if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket')
+        return json({ error: 'websocket_required' }, 426);
+      return container().fetch(proxyRequest(request, '/__health/ws'));
+    }
     if (url.pathname.startsWith('/__health'))
       return json({ error: 'not_found' }, 404);
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
