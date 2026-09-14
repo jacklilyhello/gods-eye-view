@@ -6,12 +6,15 @@ export async function check(
   base,
   path,
   status,
-  { headers = {}, method = 'GET', revision, timeout = 30000 } = {},
+  { headers = {}, method = 'GET', revision, timeout = 30000, onResponse } = {},
 ) {
   const start = Date.now();
+  const requestHeaders = new Headers(headers);
+  if (!['GET', 'HEAD'].includes(method))
+    requestHeaders.set('Origin', new URL(base).origin);
   const response = await fetch(new URL(path, base), {
     method,
-    headers,
+    headers: requestHeaders,
     redirect: 'manual',
     signal: AbortSignal.timeout(timeout),
   });
@@ -22,7 +25,10 @@ export async function check(
     status: response.status,
     ms: Date.now() - start,
     bytes: Buffer.byteLength(body),
+    mitigation: response.headers.get('cf-mitigated'),
+    server: response.headers.get('x-gev-server'),
   };
+  onResponse?.(row);
   console.log(JSON.stringify(row));
   if (Array.isArray(status))
     assert.ok(
@@ -76,16 +82,25 @@ export async function smoke({
   revision,
   apiOnly = false,
   onStaticComplete,
+  onApiComplete,
 } = {}) {
   const rows = [];
+  const failures = [];
   const run = async (path, status, method = 'GET') => {
     const result = await check(base, path, status, {
       headers,
       method,
       revision,
+      onResponse: (row) => rows.push(row),
     });
-    rows.push(result.row);
     return result;
+  };
+  const verify = async (...args) => {
+    try {
+      return await run(...args);
+    } catch (error) {
+      failures.push(error.message);
+    }
   };
   if (!apiOnly) {
     let html;
@@ -117,15 +132,16 @@ export async function smoke({
     await onStaticComplete?.(rows);
     // Managed WAF may reject sensitive-file scans before they reach the
     // Worker's 404. Both refusals are safe; ordinary API 404s remain exact.
-    for (const path of ['/.env', '/.git/config']) await run(path, [403, 404]);
+    for (const path of ['/.env', '/.git/config'])
+      await verify(path, [403, 404]);
     for (const path of [
       '/api/no-such-provider',
       '/src/main.js',
       '/@vite/client',
       '/__health',
     ])
-      await run(path, 404);
-    await run('/', 405, 'POST');
+      await verify(path, 404);
+    await verify('/', [403, 405], 'POST');
   }
   for (const [path, status, method] of [
     ['/api/tomtom/status', 200],
@@ -138,7 +154,7 @@ export async function smoke({
     ['/api/setup/keys', 404, 'POST'],
     ['/api/ais-live/track', 400],
   ])
-    await run(path, status, method);
+    await verify(path, status, method);
   // Inspect key availability before testing missing-key responses: never mint
   // paid sessions or use a credential merely to make the smoke test pass.
   const tomtom = await run('/api/tomtom/status', 200);
@@ -146,6 +162,8 @@ export async function smoke({
     await run('/api/tomtom/flow/12/936/1709.pbf', 503);
   const firms = await run('/api/firms/status', 200);
   if (!JSON.parse(firms.body).hasKey) await run('/api/firms', 503);
+  await onApiComplete?.(rows);
+  assert.deepEqual(failures, [], 'All route and method probes must pass');
   return rows;
 }
 

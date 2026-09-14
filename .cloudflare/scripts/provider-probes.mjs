@@ -55,7 +55,7 @@ export async function providerProbes(base, headers, secretNames = []) {
         try {
           const response = await fetch(new URL(sample.path, base), {
             method: sample.method || 'GET',
-            headers,
+            headers: { ...headers, Origin: new URL(base).origin },
             body: sample.body,
             redirect: 'manual',
             signal: AbortSignal.timeout(45000),

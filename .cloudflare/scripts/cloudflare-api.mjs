@@ -148,7 +148,7 @@ async function edgeDiagnostics(zoneId, label) {
         query: `query EdgeEvents($zone: string, $filter: FirewallEventsAdaptiveFilter_InputObject) {
         viewer { zones(filter: {zoneTag: $zone}) {
           firewallEventsAdaptive(limit: 30, filter: $filter, orderBy: [datetime_DESC]) {
-            datetime action source ruleId clientRequestHTTPHost
+            datetime action source ruleId clientRequestHTTPHost clientRequestPath clientRequestHTTPMethodName
           }
         }}
       }`,
@@ -158,6 +158,12 @@ async function edgeDiagnostics(zoneId, label) {
             datetime_geq: new Date(Date.now() - 3600000).toISOString(),
             datetime_leq: new Date().toISOString(),
             clientRequestHTTPHost: domain,
+            action_in: [
+              'block',
+              'managed_challenge',
+              'challenge',
+              'js_challenge',
+            ],
           },
         },
       },

@@ -230,13 +230,13 @@ try {
     ),
   );
   await unauthenticated.arrayBuffer();
-  const rows = await smoke({
+  await smoke({
     base,
     headers: accessHeaders,
     revision,
     onStaticComplete: (rows) => evidence('http-home-static', rows),
+    onApiComplete: (rows) => evidence('http-smoke', rows),
   });
-  await evidence('http-smoke', rows);
   const settings = await api(
     `${accountPath}/workers/scripts/gods-eye-view/settings`,
   );
