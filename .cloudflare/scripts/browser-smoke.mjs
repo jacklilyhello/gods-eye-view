@@ -62,11 +62,46 @@ export async function browserSmoke(base, headers = {}) {
       },
       { timeout: 90000 },
     );
-    const state = await page.evaluate(() => ({
-      title: document.title,
-      canvasCount: document.querySelectorAll('canvas').length,
-      text: document.body.innerText.slice(0, 1000),
-    }));
+    // Exercise the real first-run control and wait for visible globe imagery,
+    // not merely the existence of a canvas during the initial camera flight.
+    await page.click('[data-first-run-choice="environmental"]');
+    await page.waitForFunction(
+      () => {
+        const app = window.__godsEyeView;
+        return (
+          !document.querySelector('#first-run-launcher.visible') &&
+          app?.viewer.camera.positionCartographic.height > 17000000 &&
+          app.viewer.scene.globe.tilesLoaded &&
+          app.dataManager
+            .getAll()
+            .some(
+              (layer) => layer.id === 'earthquakes' && layer.stats.count > 0,
+            )
+        );
+      },
+      { timeout: 60000 },
+    );
+    const state = await page.evaluate(() => {
+      const app = window.__godsEyeView;
+      return {
+        title: document.title,
+        canvasCount: document.querySelectorAll('canvas').length,
+        globeTilesLoaded: app.viewer.scene.globe.tilesLoaded,
+        cameraHeightM: Math.round(
+          app.viewer.camera.positionCartographic.height,
+        ),
+        layers: app.dataManager
+          .getAll()
+          .filter((layer) => ['earthquakes', 'local-firms'].includes(layer.id))
+          .map((layer) => ({
+            id: layer.id,
+            enabled: layer.enabled,
+            count: layer.stats.count,
+            lifecycle: layer.lifecycleState,
+          })),
+        text: document.body.innerText.slice(0, 1000),
+      };
+    });
     const cookies = await page.browserContext().cookies();
     await evidence('browser-render', {
       ...state,

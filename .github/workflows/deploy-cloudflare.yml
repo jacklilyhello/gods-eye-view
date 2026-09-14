@@ -5,6 +5,14 @@ on:
     branches:
       - cf-production
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Deploy production or inspect current Cloudflare configuration
+        type: choice
+        default: deploy
+        options:
+          - deploy
+          - inspect
 
 permissions:
   contents: read
@@ -14,8 +22,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  inspect:
+    if: github.ref == 'refs/heads/cf-production' && inputs.mode == 'inspect'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.0'
+      - name: Read Cloudflare state without deployment
+        run: node --input-type=module -e "import { inspect } from './.cloudflare/scripts/cloudflare-api.mjs'; await inspect('infrastructure-inspection');"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Upload sanitized inspection evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-inspection-${{ github.sha }}-${{ github.run_id }}
+          path: output/cloudflare/
+          if-no-files-found: ignore
+          retention-days: 14
   production:
-    if: github.ref == 'refs/heads/cf-production'
+    if: github.ref == 'refs/heads/cf-production' && inputs.mode != 'inspect'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:

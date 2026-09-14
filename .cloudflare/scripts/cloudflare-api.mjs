@@ -105,6 +105,7 @@ async function containerMetrics(applicationId, label) {
 
 async function edgeDiagnostics(zoneId, label) {
   const report = {};
+  let customRules = [];
   try {
     const snippets = await api(`/zones/${zoneId}/snippets/snippet_rules`);
     const rules = Array.isArray(snippets) ? snippets : snippets.rules || [];
@@ -184,6 +185,7 @@ async function edgeDiagnostics(zoneId, label) {
   })) {
     try {
       const value = await api(path);
+      if (name === 'customRules') customRules = value.rules || [];
       report[name] =
         name === 'customRules'
           ? {
@@ -250,6 +252,32 @@ async function edgeDiagnostics(zoneId, label) {
     report.eventsAvailable = false;
     report.eventsStatus = error.status;
   }
+  const observedCustomIds = new Set(
+    report.events
+      ?.filter((event) => event.source === 'firewallCustom')
+      .map((event) => event.ruleId),
+  );
+  report.observedCustomRules = customRules
+    .filter((rule) => observedCustomIds.has(rule.id))
+    .map((rule) => ({
+      id: rule.id,
+      description: rule.description,
+      // Preserve operators and standard protocol names, but never expose
+      // custom header values, bypass credentials, addresses or URL queries.
+      conditionShape: safeMessage(
+        rule.expression?.replace(/"(?:[^"\\]|\\.)*"/g, (value) =>
+          /^"(?:|user-agent|upgrade|websocket|origin|connection|GET|POST|DELETE|OPTIONS)"$/.test(
+            value,
+          )
+            ? value
+            : '"[redacted]"',
+        ),
+      ),
+      checksEmptyUserAgent: /\bhttp\.user_agent\s+(?:eq|==)\s+""/.test(
+        rule.expression,
+      ),
+      statusCode: rule.action_parameters?.response?.status_code,
+    }));
   // Resolve only rule IDs observed for our hostname. Do not publish rule
   // expressions or inspect unrelated request payloads from the shared zone.
   try {

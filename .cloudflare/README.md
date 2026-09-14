@@ -48,18 +48,18 @@ Secrets. `src/policy.js` is the runtime environment allowlist. A subsequent
 deployment/container restart applies new values. Existing Worker secrets survive
 deployments; `--keep-vars` also preserves Dashboard configuration variables.
 
-| Provider | Runtime secret/configuration | Without credentials |
-| --- | --- | --- |
-| OpenSky | `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET`, optional `OPENSKY_AUTH_MODE` | Anonymous mode and upstream ADS-B fallback |
-| ADS-B / aircraft enrichment | None | Public providers, with their rate limits |
-| AISStream | `AISSTREAM_API_KEY` | Explicit missing-key status / HTTP 503 |
-| NASA FIRMS | `FIRMS_MAP_KEY` | Status available; fire data reports missing key |
-| TomTom | `TOMTOM_API_KEY`, optional `TOMTOM_DAILY_TILE_BUDGET` | Built-in traffic simulation; live tiles report missing key |
-| Google Places / Street View fallback | `GOOGLE_MAPS_SERVER_API_KEY` (or server-side `GOOGLE_MAPS_API_KEY`) | Places return keyless data; CCTV uses other fallbacks |
-| OpenAI | `OPENAI_API_KEY`, optional `OPENAI_REALTIME_*` / `OPENAI_HUD_SUMMARY_MODEL` | Voice credentials report HTTP 503 |
-| Launch Library | Optional `LL2_API_TOKEN` | Public allowance |
-| TfL CCTV | Optional `TFL_APP_KEY` | Other CCTV sources remain available |
-| Satellites / earthquakes / radio / terrain / Overpass / GBFS / regional data | None for public sources | Available subject to third-party availability |
+| Provider                                                                     | Runtime secret/configuration                                                | Without credentials                                        |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| OpenSky                                                                      | `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET`, optional `OPENSKY_AUTH_MODE`  | Anonymous mode and upstream ADS-B fallback                 |
+| ADS-B / aircraft enrichment                                                  | None                                                                        | Public providers, with their rate limits                   |
+| AISStream                                                                    | `AISSTREAM_API_KEY`                                                         | Explicit missing-key status / HTTP 503                     |
+| NASA FIRMS                                                                   | `FIRMS_MAP_KEY`                                                             | Status available; fire data reports missing key            |
+| TomTom                                                                       | `TOMTOM_API_KEY`, optional `TOMTOM_DAILY_TILE_BUDGET`                       | Built-in traffic simulation; live tiles report missing key |
+| Google Places / Street View fallback                                         | `GOOGLE_MAPS_SERVER_API_KEY` (or server-side `GOOGLE_MAPS_API_KEY`)         | Places return keyless data; CCTV uses other fallbacks      |
+| OpenAI                                                                       | `OPENAI_API_KEY`, optional `OPENAI_REALTIME_*` / `OPENAI_HUD_SUMMARY_MODEL` | Voice credentials report HTTP 503                          |
+| Launch Library                                                               | Optional `LL2_API_TOKEN`                                                    | Public allowance                                           |
+| TfL CCTV                                                                     | Optional `TFL_APP_KEY`                                                      | Other CCTV sources remain available                        |
+| Satellites / earthquakes / radio / terrain / Overpass / GBFS / regional data | None for public sources                                                     | Available subject to third-party availability              |
 
 Upstream's **Google photorealistic map** and **Cesium ion imagery/world terrain**
 integrations use browser-visible credentials by design. This production build
@@ -129,6 +129,12 @@ infrastructure, HTTP, browser screenshot and lifecycle evidence. Provider errors
 are distinct from SDK transport failures. Readiness polls are bounded and logged;
 acceptance requests are never retried to hide failures. There is no automatic
 rollback or blind retry of API requests that might spend quota.
+
+For configuration diagnosis, manually run this workflow on `cf-production`
+with `mode=inspect`. It uses the same GitHub Cloudflare secrets but only reads
+Cloudflare state, without rebuilding or replacing the production container.
+Custom Errors and Snippets reads need their independent zone permissions;
+unavailable optional diagnostics are explicitly recorded as such.
 
 Local validation (Node 24.14+):
 

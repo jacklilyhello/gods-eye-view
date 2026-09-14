@@ -50,7 +50,14 @@ export async function websocketProbe(base, path, headers = {}) {
   await new Promise((resolve, reject) => {
     const url = new URL(path, base);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(url, { headers, handshakeTimeout: 20000 });
+    const ws = new WebSocket(url, {
+      headers: {
+        'User-Agent': 'GodsEyeView-Production-Check/1.0',
+        Origin: new URL(base).origin,
+        ...headers,
+      },
+      handshakeTimeout: 20000,
+    });
     const timer = setTimeout(() => {
       ws.terminate();
       reject(new Error('WebSocket probe timed out'));
