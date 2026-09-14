@@ -38,7 +38,7 @@ Each deployment rotates this diagnostic credential.
 
 The deployment token also needs the independent account permission
 `Access: Service Tokens Write` (Dashboard: Edit). The workflow verifies creation
-and deletion with a five-minute token that is never authorized for any app,
+and deletion with a ten-minute token that is never authorized for any app,
 before building or changing production. Zone `Bot Management Read` and
 `Analytics Read` provide optional evidence about edge challenges. Worker logs
 redact URL query strings.
