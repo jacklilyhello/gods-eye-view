@@ -74,9 +74,6 @@ export async function inspect(label) {
     (app) => app.name === 'gods-eye-view-godseyeviewcontainer',
   );
   assert.ok(application, 'Expected existing Container application');
-  const deployments = await api(
-    `${accountPath}/containers/applications/${application.id}/deployments`,
-  );
   // Explicit allowlists: no provider values, account tokens or environment maps.
   const report = {
     observedAt: new Date().toISOString(),
@@ -102,23 +99,11 @@ export async function inspect(label) {
       ),
       observability: application.configuration?.observability,
     },
-    deployments: deployments.map((d) => ({
-      id: d.id,
-      createdAt: d.created_at,
-      status: d.status,
-      placements: d.placements?.map((p) => ({
-        id: p.id,
-        status: p.status,
-        createdAt: p.created_at,
-        terminatedAt: p.terminated_at,
-        events: p.events?.map((e) => ({
-          type: e.type,
-          name: e.name,
-          timestamp: e.timestamp,
-          exitCode: e.exit_code,
-        })),
-      })),
-    })),
+    placementHistory: {
+      available: false,
+      reason:
+        'The application deployments endpoint is not exposed by the Containers API (HTTP 404). Runtime lifecycle is verified through Durable Object and Node health probes.',
+    },
   };
   await evidence(label, report);
   console.log(JSON.stringify(report));

@@ -20,7 +20,7 @@ The container remains `basic` (1/4 vCPU, 1 GiB RAM, 4 GB ephemeral disk), with
 `max_instances = 1` and `sleepAfter = 30m`. The Node heap limit is 512 MiB.
 One instance also preserves AISStream's single backend connection per key.
 The runtime image contains Node, Connect, ws and upstream provider/source/config
-files; it contains no Vite, npm build toolchain, HMR, browser build or credentials.
+files; it contains no Vite dependencies, HMR, browser build or credentials.
 It runs as the unprivileged `node` user and handles SIGTERM gracefully.
 
 There is no added KV, R2 or D1. Durable Object storage holds small lifecycle
