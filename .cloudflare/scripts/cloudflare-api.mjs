@@ -105,6 +105,27 @@ async function containerMetrics(applicationId, label) {
 
 async function edgeDiagnostics(zoneId, label) {
   const report = {};
+  try {
+    report.workerRoutes = (await list(`/zones/${zoneId}/workers/routes`))
+      .filter((route) => {
+        const hostname = route.pattern
+          .replace(/^https?:\/\//, '')
+          .split('/')[0]
+          .toLowerCase();
+        return hostname.startsWith('*.')
+          ? domain.endsWith(`.${hostname.slice(2)}`)
+          : hostname.startsWith('*')
+            ? domain.endsWith(hostname.slice(1))
+            : hostname === domain;
+      })
+      .map(({ id, pattern, script }) => ({
+        id,
+        pattern,
+        script: script || null,
+      }));
+  } catch (error) {
+    report.workerRoutesError = safeMessage(error.message);
+  }
   for (const [scope, prefix] of [
     ['zone', `/zones/${zoneId}`],
     ['account', accountPath],
@@ -122,7 +143,9 @@ async function edgeDiagnostics(zoneId, label) {
           description: rule.description,
           // Custom error expressions use response metadata. Redact credentials
           // and never include the response body or custom asset URL.
-          expression: safeMessage(rule.expression),
+          expression: safeMessage(
+            rule.expression?.replace(/"(?:[^"\\]|\\.)*"/g, '"[redacted]"'),
+          ),
           statusCode: rule.action_parameters?.status_code,
           contentType: rule.action_parameters?.content_type,
           usesAsset: Boolean(rule.action_parameters?.asset_name),
