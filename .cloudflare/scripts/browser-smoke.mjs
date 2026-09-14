@@ -31,8 +31,15 @@ export async function browserSmoke(base, headers = {}) {
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       const own = new URL(request.url()).origin === new URL(base).origin;
+      // Strip any inherited credential headers, including redirected requests,
+      // before adding them back only for this application's exact origin.
+      const cleanHeaders = Object.fromEntries(
+        Object.entries(request.headers()).filter(
+          ([name]) => !/^cf-access-client-(id|secret)$/i.test(name),
+        ),
+      );
       void request.continue({
-        headers: own ? { ...request.headers(), ...headers } : request.headers(),
+        headers: own ? { ...cleanHeaders, ...headers } : cleanHeaders,
       });
     });
     const response = await page.goto(base, {
