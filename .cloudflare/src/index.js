@@ -70,6 +70,13 @@ export default {
         return container().fetch(proxyRequest(request, '/__health'));
       if (url.pathname === '/__ops/ws' && request.method === 'GET')
         return container().fetch(proxyRequest(request, '/__health/ws'));
+      const statusProbe = /^\/__ops\/status-code\/(405|406)$/.exec(
+        url.pathname,
+      );
+      if (statusProbe && request.method === 'GET')
+        return container().fetch(
+          proxyRequest(request, `/__health/status-code/${statusProbe[1]}`),
+        );
       return json({ error: 'not_found' }, 404);
     }
     // Hostname-based Access must not have a public workers.dev side entrance.

@@ -97,4 +97,39 @@ test('deployment operations require a separate token and strip all proxy credent
   assert.ok(!calls[0].headers.has('cf-container-target-port'));
   assert.ok(!calls[0].headers.has('x-gev-probe-token'));
   assert.ok(!calls[0].headers.has('cf-access-client-secret'));
+  for (const status of [405, 406]) {
+    const url = `https://gods.lily.lat/__ops/status-code/${status}`;
+    const before = calls.length;
+    assert.equal((await worker.fetch(new Request(url), env)).status, 404);
+    assert.equal(calls.length, before);
+    await worker.fetch(new Request(url, { headers }), env);
+    assert.equal(
+      new URL(calls.at(-1).url).pathname,
+      `/__health/status-code/${status}`,
+    );
+    assert.ok(!calls.at(-1).headers.has('x-gev-probe-token'));
+    assert.equal(
+      (await worker.fetch(new Request(url, { headers, method: 'POST' }), env))
+        .status,
+      404,
+    );
+  }
+  assert.equal(
+    (
+      await worker.fetch(
+        new Request('https://gods.lily.lat/__ops/status-code/201', { headers }),
+        env,
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await worker.fetch(
+        new Request('https://gods.lily.lat/__health/status-code/406'),
+        env,
+      )
+    ).status,
+    404,
+  );
 });

@@ -54,6 +54,16 @@ test('production provider routes preserve status, keyless and prefix semantics',
     const finalHealth = await (await fetch(`${base}/__health`)).json();
     assert.equal(finalHealth.websockets.accepted, 1);
     assert.equal(finalHealth.websockets.rejected, 0);
+    for (const status of [405, 406]) {
+      const response = await fetch(`${base}/__health/status-code/${status}`);
+      assert.equal(response.status, status);
+      assert.equal(response.headers.get('x-gev-server'), 'node-production');
+      assert.deepEqual(await response.json(), {
+        error: 'diagnostic_status',
+        status,
+      });
+    }
+    assert.equal((await fetch(`${base}/__health/status-code/201`)).status, 404);
   } finally {
     await runtime.close();
   }

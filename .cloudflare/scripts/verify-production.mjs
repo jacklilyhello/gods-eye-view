@@ -12,6 +12,7 @@ import { check, smoke, websocketProbe } from './smoke.mjs';
 import { browserSmoke } from './browser-smoke.mjs';
 import { providerProbes } from './provider-probes.mjs';
 import { ensureEdgeAccess } from './ensure-edge-access.mjs';
+import { ensureErrorResponses } from './ensure-error-responses.mjs';
 
 const base = `https://${domain}`;
 const diagnosticBase = 'https://gods-eye-view.lilyya.workers.dev';
@@ -146,6 +147,7 @@ try {
     ownerPolicy: true,
   });
   await ensureEdgeAccess(app);
+  await ensureErrorResponses();
   // A newly created Custom Domain can need DNS/TLS propagation. Keep these
   // readiness attempts distinct from the 20 no-retry acceptance requests.
   for (let attempt = 0; attempt < 36; attempt++) {
@@ -238,6 +240,31 @@ try {
     ),
   );
   await unauthenticated.arrayBuffer();
+  let statusError;
+  try {
+    const samples = [];
+    for (const status of [405, 406]) {
+      const { row, body, response } = await check(
+        base,
+        `/__ops/status-code/${status}`,
+        status,
+        { headers: { ...accessHeaders, ...probeHeaders } },
+      );
+      assert.equal(row.server, 'node-production');
+      assert.equal(response.headers.get('x-gev-revision'), revision);
+      assert.deepEqual(JSON.parse(body), {
+        error: 'diagnostic_status',
+        status,
+      });
+      samples.push(row);
+    }
+    await evidence('http-status-preservation', samples);
+  } catch (error) {
+    statusError = error;
+    await evidence('http-status-preservation-failure', {
+      message: error.message,
+    });
+  }
   let routeError;
   try {
     await smoke({
@@ -364,6 +391,7 @@ try {
   const infrastructure = await inspect('infrastructure-after');
   assert.ok(infrastructure.report.domains.some((d) => d.hostname === domain));
   const acceptanceErrors = [
+    statusError,
     routeError,
     providerError,
     ...transportErrors,
@@ -377,6 +405,7 @@ try {
     revision,
     completedAt: new Date().toISOString(),
     homepageRequests: 20,
+    preservedHttpStatuses: [405, 406],
     access: {
       type: app.type,
       domain: app.domain,

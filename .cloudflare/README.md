@@ -91,6 +91,15 @@ verifies the Access owner policy before configuring this scoped rule, preserves
 all other zone rules, and requires both unauthenticated Access redirects and
 authenticated HTTP 200 responses. Its token therefore also needs zone WAF write.
 
+The existing zone Custom Errors rule `4ded32ebdd7a4c99bf8b579c60ca5ab3`
+previously replaced several API error codes (including 405 and 406) with a 403
+HTML page. Deployment excludes only `gods.lily.lat` from that presentation rule,
+preserving its other hosts, assets and rule order. This needs zone
+`Custom Errors Write` (Dashboard: Edit). Access and WAF still enforce access;
+the exclusion only preserves application error responses. Snippets are inspected
+but not changed. Synthetic 405/406 probes additionally require the independent
+deployment credential and exercise the full Access/Worker/Container path.
+
 The public workers.dev URL redirects to the custom domain. `/__ops/*` on either
 host additionally requires `X-GEV-Probe-Token`; normal API requests cannot select
 a different container port. Access cookies, Access service credentials and

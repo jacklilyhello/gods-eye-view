@@ -117,6 +117,14 @@ async function edgeDiagnostics(zoneId, label) {
         rule.expression?.replace(/"(?:[^"\\]|\\.)*"/g, '"[redacted]"'),
       ),
       mentionsHostname: rule.expression?.includes(domain),
+      appliesToProduction:
+        rule.enabled === false
+          ? false
+          : /^\(?\s*http\.host\s+eq\s+"[^"\\]+"\s*\)?$/.test(
+                rule.expression?.trim(),
+              )
+            ? rule.expression.includes(`"${domain}"`)
+            : null,
     }));
   } catch (error) {
     report.snippetRulesError = {
@@ -168,6 +176,9 @@ async function edgeDiagnostics(zoneId, label) {
           statusCode: rule.action_parameters?.status_code,
           contentType: rule.action_parameters?.content_type,
           usesAsset: Boolean(rule.action_parameters?.asset_name),
+          excludesProductionHostname: rule.expression?.includes(
+            `(http.host ne "${domain}")`,
+          ),
         })),
       };
     } catch (error) {

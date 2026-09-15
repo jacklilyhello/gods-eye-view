@@ -62,7 +62,13 @@ export async function createProductionServer({
     next();
   });
   middlewares.use(async (req, res, next) => {
-    if (req.url?.split('?')[0] !== '/__health') return next();
+    const pathname = req.url?.split('?')[0];
+    const statusProbe = /^\/__health\/status-code\/(405|406)$/.exec(pathname);
+    if (statusProbe && req.method === 'GET') {
+      const status = Number(statusProbe[1]);
+      return json(res, status, { error: 'diagnostic_status', status });
+    }
+    if (pathname !== '/__health') return next();
     if (req.method !== 'GET')
       return json(res, 405, { error: 'method_not_allowed' });
     let memoryEvents = null;

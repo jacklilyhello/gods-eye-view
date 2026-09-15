@@ -148,7 +148,7 @@ export async function smoke({
       '/__health',
     ])
       await verify(path, 404);
-    await verify('/', [403, 405], 'POST');
+    await verify('/', 405, 'POST');
   }
   for (const [path, status, method] of [
     ['/api/tomtom/status', 200],
