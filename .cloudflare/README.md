@@ -128,6 +128,15 @@ existing account/zone/Worker, deploys via Wrangler, validates the production
 revision, configures/verifies Access, runs 20 sequential home requests plus
 concurrency/static/API tests, and launches a real Chromium browser.
 
+The image contains an immutable build revision stamped from `GITHUB_SHA` before
+both Docker and Wrangler builds. Readiness requires **both** that image revision
+and the Worker-supplied revision to match the deployment. Cloudflare activates the
+Worker before container replacements finish, even with immediate rollout; an old
+image can otherwise report a new Worker environment variable and falsely pass
+readiness. Only bounded health polling happens during that mixed-version window.
+The subsequent acceptance traffic must keep the same boot ID with no additional
+lifecycle errors. Readiness samples are saved separately from acceptance results.
+
 Set the repository variable `CF_LIFECYCLE_TEST=true` to additionally exercise
 a controlled production stop/wake and verify that static assets stay available
 while the container is stopped. This deliberately interrupts active APIs;
@@ -155,6 +164,7 @@ npm test
 node --test .cloudflare/tests/*.test.mjs
 npm run build -- --config .cloudflare/vite.config.mjs
 node .cloudflare/scripts/validate-build.mjs
+node .cloudflare/scripts/prepare-runtime-build.mjs
 docker build -f Dockerfile.cloudflare -t gods-eye-view-test .
 ```
 
@@ -190,4 +200,5 @@ provider logic.
 References: [Vite production guidance](https://vite.dev/guide/static-deploy),
 [Container limits](https://developers.cloudflare.com/containers/platform/limits/),
 [Container lifecycle](https://developers.cloudflare.com/containers/concepts/architecture/),
+[Container rollouts](https://developers.cloudflare.com/containers/configuration/rollouts/),
 [Access and WebSockets](https://developers.cloudflare.com/workers/configuration/cloudflare-access/).

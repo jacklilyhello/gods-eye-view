@@ -11,7 +11,7 @@ COPY --chown=node:node server ./server
 COPY --chown=node:node src ./src
 COPY --chown=node:node config ./config
 COPY --chown=node:node scripts ./scripts
-COPY --chown=node:node .cloudflare/runtime/server.mjs ./.cloudflare/runtime/server.mjs
+COPY --chown=node:node .cloudflare/runtime/server.mjs .cloudflare/runtime/build-info.json ./.cloudflare/runtime/
 RUN mkdir -p .gev-cache .gev-logs && chown node:node .gev-cache .gev-logs
 ENV HOST=0.0.0.0 PORT=4173 NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512
 USER node

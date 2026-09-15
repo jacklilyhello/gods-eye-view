@@ -109,6 +109,14 @@ export async function smoke({
       failures.push(error.message);
     }
   };
+  if (apiOnly) {
+    const { body } = await run('/__health', 200);
+    assert.equal(
+      JSON.parse(body).imageRevision,
+      process.env.GITHUB_SHA || 'local',
+      'Docker must contain the checked-out image revision',
+    );
+  }
   if (!apiOnly) {
     let html;
     for (let i = 0; i < 20; i++) html = (await run('/', 200)).body;

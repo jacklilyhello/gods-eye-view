@@ -17,6 +17,17 @@ test('production provider routes preserve status, keyless and prefix semantics',
   try {
     const health = await (await fetch(`${base}/__health`)).json();
     assert.equal(health.server, 'node-production');
+    assert.match(health.imageRevision, /^(?:local|[a-f0-9]{40})$/);
+    const previousRevision = process.env.GEV_REVISION;
+    try {
+      process.env.GEV_REVISION = 'new-worker-old-image';
+      const mismatched = await (await fetch(`${base}/__health`)).json();
+      assert.equal(mismatched.revision, 'new-worker-old-image');
+      assert.equal(mismatched.imageRevision, health.imageRevision);
+    } finally {
+      if (previousRevision === undefined) delete process.env.GEV_REVISION;
+      else process.env.GEV_REVISION = previousRevision;
+    }
     assert.equal(health.providers.length, 19);
     const checks = [
       ['/api/tomtom/status', 200],

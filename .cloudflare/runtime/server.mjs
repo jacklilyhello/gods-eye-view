@@ -7,6 +7,18 @@ import connect from 'connect';
 import { WebSocketServer } from 'ws';
 import { localProviderPlugins } from '../../server/providers/local.js';
 
+const imageRevision = await readFile(
+  new URL('./build-info.json', import.meta.url),
+  'utf8',
+)
+  .then((content) => JSON.parse(content).revision)
+  .catch((error) => {
+    if (error.code === 'ENOENT') return 'local';
+    throw error;
+  });
+if (!/^(?:local|[a-f0-9]{40})$/.test(imageRevision))
+  throw new Error('Invalid immutable image revision');
+
 const json = (res, status, body) => {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -81,6 +93,7 @@ export async function createProductionServer({
       ok: true,
       server: 'node-production',
       revision: process.env.GEV_REVISION || 'local',
+      imageRevision,
       bootId,
       uptimeSeconds: Math.floor(process.uptime()),
       requests,
@@ -184,6 +197,7 @@ if (
           event: 'server_started',
           bootId,
           revision: process.env.GEV_REVISION || 'local',
+          imageRevision,
           providers: installed.length,
           rssBytes: process.memoryUsage().rss,
         }),

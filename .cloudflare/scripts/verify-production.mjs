@@ -13,6 +13,7 @@ import { browserSmoke } from './browser-smoke.mjs';
 import { providerProbes } from './provider-probes.mjs';
 import { ensureEdgeAccess } from './ensure-edge-access.mjs';
 import { ensureErrorResponses } from './ensure-error-responses.mjs';
+import { waitForRuntime } from './wait-for-runtime.mjs';
 
 const base = `https://${domain}`;
 const diagnosticBase = 'https://gods-eye-view.lilyya.workers.dev';
@@ -20,25 +21,31 @@ const probeHeaders = {
   'x-gev-probe-token': process.env.GEV_DEPLOY_PROBE_TOKEN,
 };
 const revision = process.env.GITHUB_SHA;
+const readinessPhases = [];
 
-async function ready() {
-  for (let attempt = 1; attempt <= 60; attempt++) {
-    try {
-      const { body } = await check(diagnosticBase, '/__ops/health', 200, {
-        headers: probeHeaders,
-        timeout: 30000,
-      });
-      const health = JSON.parse(body);
-      if (health.server === 'node-production' && health.revision === revision)
-        return health;
-    } catch (error) {
-      console.log(
-        JSON.stringify({ readinessAttempt: attempt, error: error.name }),
-      );
-    }
-    await delay(5000);
+async function ready(phase) {
+  const samples = [];
+  const record = { phase, startedAt: new Date().toISOString(), samples };
+  readinessPhases.push(record);
+  try {
+    return await waitForRuntime({
+      revision,
+      readHealth: async () => {
+        const { body } = await check(diagnosticBase, '/__ops/health', 200, {
+          headers: probeHeaders,
+          timeout: 30000,
+        });
+        return JSON.parse(body);
+      },
+      onSample: (sample) => {
+        samples.push(sample);
+        console.log(JSON.stringify({ readinessPhase: phase, ...sample }));
+      },
+    });
+  } finally {
+    record.completedAt = new Date().toISOString();
+    await evidence('runtime-readiness', readinessPhases);
   }
-  throw new Error('New production revision did not become ready');
 }
 
 async function ensureAccess(existing) {
@@ -103,7 +110,8 @@ let token;
 let policy;
 let app;
 try {
-  const initialHealth = await ready();
+  const initialHealth = await ready('initial');
+  let expectedBootId = initialHealth.bootId;
   await evidence('runtime-before', initialHealth);
   const initialLifecycle = JSON.parse(
     (
@@ -327,11 +335,20 @@ try {
       ),
     ),
   );
+  await evidence('runtime-after-traffic', healthResults.at(-1));
+  await evidence(
+    'runtime-concurrency',
+    healthResults.map(({ bootId, revision, imageRevision, memory }) => ({
+      bootId,
+      revision,
+      imageRevision,
+      rss: memory.rss,
+    })),
+  );
   assert.ok(
     healthResults.every((health) => health.bootId === initialHealth.bootId),
     'Container must not restart during normal acceptance traffic',
   );
-  await evidence('runtime-after-traffic', healthResults.at(-1));
   if (process.env.CF_LIFECYCLE_TEST === 'true') {
     await check(diagnosticBase, '/__ops/stop', 200, {
       headers: probeHeaders,
@@ -355,12 +372,13 @@ try {
     }
     // Static Assets remain available while the container is stopped.
     await check(base, '/', 200, { headers: accessHeaders, revision });
-    const restarted = await ready();
+    const restarted = await ready('restart');
     assert.notEqual(
       restarted.bootId,
       initialHealth.bootId,
       'Lifecycle test requires a new Node process',
     );
+    expectedBootId = restarted.bootId;
     await evidence('runtime-after-restart', restarted);
     await check(base, '/api/tomtom/status', 200, {
       headers: accessHeaders,
@@ -373,8 +391,13 @@ try {
       }),
     );
   }
-  const finalHealth = await ready();
+  const finalHealth = await ready('final');
   await evidence('runtime-final', finalHealth);
+  assert.equal(
+    finalHealth.bootId,
+    expectedBootId,
+    'No unexpected final restart',
+  );
   const lifecycle = JSON.parse(
     (
       await check(diagnosticBase, '/__ops/status', 200, {

@@ -84,6 +84,8 @@ jobs:
       - name: Build browser assets without provider credentials
         run: npm run build -- --config .cloudflare/vite.config.mjs
       - run: node .cloudflare/scripts/validate-build.mjs
+      - name: Stamp immutable container image revision
+        run: node .cloudflare/scripts/prepare-runtime-build.mjs
       - name: Validate Worker configuration without deployment
         run: .cloudflare/node_modules/.bin/wrangler deploy --config .cloudflare/wrangler.jsonc --dry-run --outdir .cloudflare/.wrangler/dry-run
         env:
